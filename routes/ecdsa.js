@@ -11,7 +11,7 @@ const ecdsa = new elliptic.ec("secp256k1")
 
 app.use(express.json()) // Add this line to parse JSON bodies
 
-app.post("/sign", async (req, res) => {
+app.get("/sign/:data", async (req, res) => {
   try {
     let { data } = req.body
     if (!data) {
