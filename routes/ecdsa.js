@@ -5,8 +5,6 @@ const redis = require("../scripts/redis")
 const ecdsaKeyPair = require("../scripts/keypair")
 require("dotenv").config()
 
-const SHA256 = require("crypto-js/sha256")
-
 // Import elliptic library
 const elliptic = require("elliptic")
 const ecdsa = new elliptic.ec("secp256k1")
@@ -21,34 +19,38 @@ app.post("/sign", async (req, res) => {
     }
 
     // Retrieve or generate key pair
-    let thisEcdsa = await redis.get("ecdsa")
-    let keyPair = JSON.parse(thisEcdsa)
-    let privateKey, publicKey
+    // let thisEcdsa = await redis.get("ecdsa")
+    // let keyPair = JSON.parse(thisEcdsa)
+    let keyPair, privateKey, publicKey
 
-    if (keyPair) {
-      privateKey = keyPair.privateKey
-      publicKey = keyPair.publicKey
-    } else {
-      keyPair = await ecdsaKeyPair.ecdsakeygen()
-      await redis.setex(
-        "ecdsa",
-        process.env.REDIS_DATA_EXPIRY,
-        JSON.stringify(keyPair)
-      )
-      privateKey = keyPair.privateKey
-      publicKey = keyPair.publicKey
-    }
+    // if (keyPair) {
+    //   privateKey = keyPair.privateKey
+    //   publicKey = keyPair.publicKey
+    // } else {
+    //   keyPair = await ecdsaKeyPair.ecdsakeygen()
+    //   await redis.setex(
+    //     "ecdsa",
+    //     process.env.REDIS_DATA_EXPIRY,
+    //     JSON.stringify(keyPair)
+    //   )
+    //   privateKey = keyPair.privateKey
+    //   publicKey = keyPair.publicKey
+    // }
+    keyPair = await ecdsaKeyPair.ecdsakeygen()
 
+    privateKey = keyPair.privateKey
+    publicKey = keyPair.publicKey
     // Create hash of the data
-    const hash = crypto.createHash("sha256").update(data).digest("hex")
+    const hash = crypto.createHash("sha256").update(data).digest()
 
-    // Sign the hash
     const key = ecdsa.keyFromPrivate(privateKey, "hex")
     const signature = key.sign(hash)
+
+    // Get the DER-encoded signature and convert to hex
     const derSignature = signature.toDER("hex")
 
     // Respond with the signature and public key
-    res.json({ signature: SHA256(derSignature).toString(), publicKey })
+    res.json({ signature: derSignature, publicKey })
   } catch (error) {
     console.error("Error during signing:", error)
     res.status(500).json({ error: "Failed to sign data" })
@@ -65,14 +67,17 @@ app.post("/verify", (req, res) => {
         .json({ error: "Missing signature, data, or publicKey" })
     }
 
+    // Decode the Base64 signature
+    const derSignature = Buffer.from(signature, "base64")
+
     // Create hash of the data
-    const hash = crypto.createHash("sha256").update(data).digest("hex")
+    const hash = crypto.createHash("sha256").update(data).digest()
 
     // Get key from public key
     const key = ecdsa.keyFromPublic(publicKey, "hex")
 
     // Verify the signature
-    const isValid = key.verify(hash, signature)
+    const isValid = key.verify(hash, derSignature)
 
     if (isValid) {
       res.json({ verified: true })
