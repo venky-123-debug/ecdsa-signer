@@ -5,15 +5,14 @@ const redis = require("../scripts/redis")
 const ecdsaKeyPair = require("../scripts/keypair")
 require("dotenv").config()
 
-// Import elliptic library
 const elliptic = require("elliptic")
 const ecdsa = new elliptic.ec("secp256k1")
 
-app.use(express.json()) // Add this line to parse JSON bodies
+app.use(express.json())
 
 app.get("/sign/:data", async (req, res) => {
   try {
-    let { data } = req.body
+    let { data } = req.params
     if (!data) {
       return res.status(400).json({ error: "No data provided" })
     }
@@ -36,11 +35,20 @@ app.get("/sign/:data", async (req, res) => {
       privateKey = keyPair.privateKey
       publicKey = keyPair.publicKey
     }
+
+    // Hash the data
     let hash = crypto.createHash("sha256").update(data).digest()
 
     // Sign the hash
     let key = ecdsa.keyFromPrivate(privateKey, "hex")
-    let signature = key.sign(hash)
+
+    // Generate a random nonce `k` and sign with it
+    let signature = key.sign(hash, { canonical: true })
+    // // Sign the hash
+    // let key = ecdsa.keyFromPrivate(privateKey, "hex")
+
+    // // `sign()` uses a random nonce `k` internally by default, generating different signatures
+    // let signature = key.sign(hash)
 
     // Get the DER-encoded signature and convert to hex
     let derSignature = signature.toDER("hex")
@@ -68,10 +76,10 @@ app.get("/verify", (req, res) => {
 
     // Get key from public key
     let key = ecdsa.keyFromPublic(publicKey, "hex")
-    console.log({ key })
+
     // Verify the signature
     let isValid = key.verify(hash, signature)
-    console.log({ isValid })
+
     if (isValid) {
       res.json({ verified: true })
     } else {
